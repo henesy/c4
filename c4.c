@@ -50,13 +50,13 @@ void next(void)
     ++p;
     if (tk == '\n') {
       if (src) {
-        printf("%d: %.*s", line, p - lp, lp);
+		print("%lld: %.*s", line, p - lp, lp);
         lp = p;
         while (le < e) {
-          printf("%8.4s", &"LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
+          print("%8.4s", &"LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
                            "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
                            "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[*++le * 5]);
-          if (*le <= ADJ) printf(" %d\n", *++le); else printf("\n");
+          if (*le <= ADJ) print(" %lld\n", *++le); else print("\n");
         }
       }
       ++line;
@@ -278,7 +278,7 @@ void expr(int lev)
   }
 }
 
-void stmt()
+void stmt(void)
 {
   int *a, *b;
 
@@ -332,33 +332,35 @@ int main(int argc, char **argv)
   int fd, bt, ty, poolsz, *idmain;
   int *pc, *sp, *bp, a, cycle; // vm registers
   int i, *t; // temps
+  
+  a = 0;
 
   --argc; ++argv;
   if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
   if (argc > 0 && **argv == '-' && (*argv)[1] == 'd') { debug = 1; --argc; ++argv; }
-  if (argc < 1) { printf("usage: c4 [-s] [-d] file ...\n"); return -1; }
+  if (argc < 1) { print("usage: c4 [-s] [-d] file ...\n"); return -1; }
 
-  if ((fd = open(*argv, 0)) < 0) { printf("could not open(%s)\n", *argv); return -1; }
+  if ((fd = open(*argv, 0)) < 0) { print("could not open(%s)\n", *argv); return -1; }
 
   poolsz = 256*1024; // arbitrary size
-  if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
-  if (!(le = e = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; }
-  if (!(data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; }
-  if (!(sp = malloc(poolsz))) { printf("could not malloc(%d) stack area\n", poolsz); return -1; }
+  if (!(sym = malloc(poolsz))) { print("could not malloc(%lld) symbol area\n", poolsz); return -1; }
+  if (!(le = e = malloc(poolsz))) { print("could not malloc(%lld) text area\n", poolsz); return -1; }
+  if (!(data = malloc(poolsz))) { print("could not malloc(%lld) data area\n", poolsz); return -1; }
+  if (!(sp = malloc(poolsz))) { print("could not malloc(%lld) stack area\n", poolsz); return -1; }
 
   memset(sym,  0, poolsz);
   memset(e,    0, poolsz);
   memset(data, 0, poolsz);
 
   p = "char else enum if int return sizeof while "
-      "open read close printf malloc free memset memcmp exit void main";
+      "open read close print malloc free memset memcmp exit void main";
   i = Char; while (i <= While) { next(); id[Tk] = i++; } // add keywords to symbol table
   i = OPEN; while (i <= EXIT) { next(); id[Class] = Sys; id[Type] = INT; id[Val] = i++; } // add library to symbol table
   next(); id[Tk] = Char; // handle void type
   next(); idmain = id; // keep track of main
 
-  if (!(lp = p = malloc(poolsz))) { printf("could not malloc(%d) source area\n", poolsz); return -1; }
-  if ((i = read(fd, p, poolsz-1)) <= 0) { printf("read() returned %d\n", i); return -1; }
+  if (!(lp = p = malloc(poolsz))) { print("could not malloc(%lld) source area\n", poolsz); return -1; }
+  if ((i = read(fd, p, poolsz-1)) <= 0) { print("read() returned %lld\n", i); return -1; }
   p[i] = 0;
   close(fd);
 
@@ -376,11 +378,11 @@ int main(int argc, char **argv)
         next();
         i = 0;
         while (tk != '}') {
-          if (tk != Id) { printf("%d: bad enum identifier %d\n", line, tk); return -1; }
+          if (tk != Id) { print("%lld: bad enum identifier %lld\n", line, tk); return -1; }
           next();
           if (tk == Assign) {
             next();
-            if (tk != Num) { printf("%d: bad enum initializer\n", line); return -1; }
+            if (tk != Num) { print("%lld: bad enum initializer\n", line); return -1; }
             i = ival;
             next();
           }
@@ -393,8 +395,8 @@ int main(int argc, char **argv)
     while (tk != ';' && tk != '}') {
       ty = bt;
       while (tk == Mul) { next(); ty = ty + PTR; }
-      if (tk != Id) { printf("%d: bad global declaration\n", line); return -1; }
-      if (id[Class]) { printf("%d: duplicate global definition\n", line); return -1; }
+      if (tk != Id) { print("%lld: bad global declaration\n", line); return -1; }
+      if (id[Class]) { print("%lld: duplicate global definition\n", line); return -1; }
       next();
       id[Type] = ty;
       if (tk == '(') { // function
@@ -406,8 +408,8 @@ int main(int argc, char **argv)
           if (tk == Int) next();
           else if (tk == Char) { next(); ty = CHAR; }
           while (tk == Mul) { next(); ty = ty + PTR; }
-          if (tk != Id) { printf("%d: bad parameter declaration\n", line); return -1; }
-          if (id[Class] == Loc) { printf("%d: duplicate parameter definition\n", line); return -1; }
+          if (tk != Id) { print("%lld: bad parameter declaration\n", line); return -1; }
+          if (id[Class] == Loc) { print("%lld: duplicate parameter definition\n", line); return -1; }
           id[HClass] = id[Class]; id[Class] = Loc;
           id[HType]  = id[Type];  id[Type] = ty;
           id[HVal]   = id[Val];   id[Val] = i++;
@@ -415,7 +417,7 @@ int main(int argc, char **argv)
           if (tk == ',') next();
         }
         next();
-        if (tk != '{') { printf("%d: bad function definition\n", line); return -1; }
+        if (tk != '{') { print("%lld: bad function definition\n", line); return -1; }
         loc = ++i;
         next();
         while (tk == Int || tk == Char) {
@@ -424,8 +426,8 @@ int main(int argc, char **argv)
           while (tk != ';') {
             ty = bt;
             while (tk == Mul) { next(); ty = ty + PTR; }
-            if (tk != Id) { printf("%d: bad local declaration\n", line); return -1; }
-            if (id[Class] == Loc) { printf("%d: duplicate local definition\n", line); return -1; }
+            if (tk != Id) { print("%lld: bad local declaration\n", line); return -1; }
+            if (id[Class] == Loc) { print("%lld: duplicate local definition\n", line); return -1; }
             id[HClass] = id[Class]; id[Class] = Loc;
             id[HType]  = id[Type];  id[Type] = ty;
             id[HVal]   = id[Val];   id[Val] = ++i;
@@ -457,7 +459,7 @@ int main(int argc, char **argv)
     next();
   }
 
-  if (!(pc = (int *)idmain[Val])) { printf("main() not defined\n"); return -1; }
+  if (!(pc = (int *)idmain[Val])) { print("main() not defined\n"); return -1; }
   if (src) return 0;
 
   // setup stack
@@ -473,11 +475,11 @@ int main(int argc, char **argv)
   while (1) {
     i = *pc++; ++cycle;
     if (debug) {
-      printf("%d> %.4s", cycle,
+      print("%lld> %.4s", cycle,
         &"LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
          "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
          "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
-      if (i <= ADJ) printf(" %d\n", *pc); else printf("\n");
+      if (i <= ADJ) print(" %lld\n", *pc); else print("\n");
     }
     if      (i == LEA) a = (int)(bp + *pc++);                             // load local address
     else if (i == IMM) a = *pc++;                                         // load global address or immediate
@@ -514,12 +516,12 @@ int main(int argc, char **argv)
     else if (i == OPEN) a = open((char *)sp[1], *sp);
     else if (i == READ) a = read(sp[2], (char *)sp[1], *sp);
     else if (i == CLOS) a = close(*sp);
-    else if (i == PRTF) { t = sp + pc[1]; a = printf((char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
+    else if (i == PRTF) { t = sp + pc[1]; a = print((char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
     else if (i == MALC) a = (int)malloc(*sp);
     else if (i == FREE) free((void *)*sp);
     else if (i == MSET) a = (int)memset((char *)sp[2], sp[1], *sp);
     else if (i == MCMP) a = memcmp((char *)sp[2], (char *)sp[1], *sp);
-    else if (i == EXIT) { printf("exit(%d) cycle = %d\n", *sp, cycle); return *sp; }
-    else { printf("unknown instruction = %d! cycle = %d\n", i, cycle); return -1; }
+    else if (i == EXIT) { print("exit(%lld) cycle = %lld\n", *sp, cycle); return *sp; }
+    else { print("unknown instruction = %lld! cycle = %lld\n", i, cycle); return -1; }
   }
 }
