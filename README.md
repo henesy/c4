@@ -5,7 +5,7 @@ An exercise in minimalism.
 
 Try the following:
 
-    gcc -o c4 c4.c
+    mk
     ./c4 hello.c
     ./c4 -s hello.c
     
