@@ -42,7 +42,7 @@ enum { CHAR, INT, PTR };
 // identifier offsets (since we can't create an ident struct)
 enum { Tk, Hash, Name, Class, Type, Val, HClass, HType, HVal, Idsz };
 
-void next()
+void next(void)
 {
   char *pp;
 
@@ -132,7 +132,7 @@ void expr(int lev)
 {
   int t, *d;
 
-  if (!tk) { printf("%d: unexpected eof in expression\n", line); exit(-1); }
+  if (!tk) { sysfatal("%lld: unexpected eof in expression\n", line); }
   else if (tk == Num) { *++e = IMM; *++e = ival; next(); ty = INT; }
   else if (tk == '"') {
     *++e = IMM; *++e = ival; next();
@@ -140,10 +140,10 @@ void expr(int lev)
     data = (char *)((int)data + sizeof(int) & -sizeof(int)); ty = PTR;
   }
   else if (tk == Sizeof) {
-    next(); if (tk == '(') next(); else { printf("%d: open paren expected in sizeof\n", line); exit(-1); }
+    next(); if (tk == '(') next(); else { sysfatal("%lld: open paren expected in sizeof\n", line); }
     ty = INT; if (tk == Int) next(); else if (tk == Char) { next(); ty = CHAR; }
     while (tk == Mul) { next(); ty = ty + PTR; }
-    if (tk == ')') next(); else { printf("%d: close paren expected in sizeof\n", line); exit(-1); }
+    if (tk == ')') next(); else { sysfatal("%lld: close paren expected in sizeof\n", line); }
     *++e = IMM; *++e = (ty == CHAR) ? sizeof(char) : sizeof(int);
     ty = INT;
   }
@@ -156,7 +156,7 @@ void expr(int lev)
       next();
       if (d[Class] == Sys) *++e = d[Val];
       else if (d[Class] == Fun) { *++e = JSR; *++e = d[Val]; }
-      else { printf("%d: bad function call\n", line); exit(-1); }
+      else { sysfatal("%lld: bad function call\n", line); }
       if (t) { *++e = ADJ; *++e = t; }
       ty = d[Type];
     }
@@ -164,7 +164,7 @@ void expr(int lev)
     else {
       if (d[Class] == Loc) { *++e = LEA; *++e = loc - d[Val]; }
       else if (d[Class] == Glo) { *++e = IMM; *++e = d[Val]; }
-      else { printf("%d: undefined variable\n", line); exit(-1); }
+      else { sysfatal("%lld: undefined variable\n", line); }
       *++e = ((ty = d[Type]) == CHAR) ? LC : LI;
     }
   }
@@ -173,23 +173,23 @@ void expr(int lev)
     if (tk == Int || tk == Char) {
       t = (tk == Int) ? INT : CHAR; next();
       while (tk == Mul) { next(); t = t + PTR; }
-      if (tk == ')') next(); else { printf("%d: bad cast\n", line); exit(-1); }
+      if (tk == ')') next(); else { sysfatal("%lld: bad cast\n", line); }
       expr(Inc);
       ty = t;
     }
     else {
       expr(Assign);
-      if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
+      if (tk == ')') next(); else { sysfatal("%lld: close paren expected\n", line); }
     }
   }
   else if (tk == Mul) {
     next(); expr(Inc);
-    if (ty > INT) ty = ty - PTR; else { printf("%d: bad dereference\n", line); exit(-1); }
+    if (ty > INT) ty = ty - PTR; else { sysfatal("%lld: bad dereference\n", line); }
     *++e = (ty == CHAR) ? LC : LI;
   }
   else if (tk == And) {
     next(); expr(Inc);
-    if (*e == LC || *e == LI) --e; else { printf("%d: bad address-of\n", line); exit(-1); }
+    if (*e == LC || *e == LI) --e; else { sysfatal("%lld: bad address-of\n", line); }
     ty = ty + PTR;
   }
   else if (tk == '!') { next(); expr(Inc); *++e = PSH; *++e = IMM; *++e = 0; *++e = EQ; ty = INT; }
@@ -204,26 +204,26 @@ void expr(int lev)
     t = tk; next(); expr(Inc);
     if (*e == LC) { *e = PSH; *++e = LC; }
     else if (*e == LI) { *e = PSH; *++e = LI; }
-    else { printf("%d: bad lvalue in pre-increment\n", line); exit(-1); }
+    else { sysfatal("%lld: bad lvalue in pre-increment\n", line); }
     *++e = PSH;
     *++e = IMM; *++e = (ty > PTR) ? sizeof(int) : sizeof(char);
     *++e = (t == Inc) ? ADD : SUB;
     *++e = (ty == CHAR) ? SC : SI;
   }
-  else { printf("%d: bad expression\n", line); exit(-1); }
+  else { sysfatal("%lld: bad expression\n", line); }
 
   while (tk >= lev) { // "precedence climbing" or "Top Down Operator Precedence" method
     t = ty;
     if (tk == Assign) {
       next();
-      if (*e == LC || *e == LI) *e = PSH; else { printf("%d: bad lvalue in assignment\n", line); exit(-1); }
+      if (*e == LC || *e == LI) *e = PSH; else { sysfatal("%lld: bad lvalue in assignment\n", line); }
       expr(Assign); *++e = ((ty = t) == CHAR) ? SC : SI;
     }
     else if (tk == Cond) {
       next();
       *++e = BZ; d = ++e;
       expr(Assign);
-      if (tk == ':') next(); else { printf("%d: conditional missing colon\n", line); exit(-1); }
+      if (tk == ':') next(); else { sysfatal("%lld: conditional missing colon\n", line); }
       *d = (int)(e + 3); *++e = JMP; d = ++e;
       expr(Cond);
       *d = (int)(e + 1);
@@ -258,7 +258,7 @@ void expr(int lev)
     else if (tk == Inc || tk == Dec) {
       if (*e == LC) { *e = PSH; *++e = LC; }
       else if (*e == LI) { *e = PSH; *++e = LI; }
-      else { printf("%d: bad lvalue in post-increment\n", line); exit(-1); }
+      else { sysfatal("%lld: bad lvalue in post-increment\n", line); }
       *++e = PSH; *++e = IMM; *++e = (ty > PTR) ? sizeof(int) : sizeof(char);
       *++e = (tk == Inc) ? ADD : SUB;
       *++e = (ty == CHAR) ? SC : SI;
@@ -268,13 +268,13 @@ void expr(int lev)
     }
     else if (tk == Brak) {
       next(); *++e = PSH; expr(Assign);
-      if (tk == ']') next(); else { printf("%d: close bracket expected\n", line); exit(-1); }
+      if (tk == ']') next(); else { sysfatal("%lld: close bracket expected\n", line); }
       if (t > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(int); *++e = MUL;  }
-      else if (t < PTR) { printf("%d: pointer type expected\n", line); exit(-1); }
+      else if (t < PTR) { sysfatal("%lld: pointer type expected\n", line); }
       *++e = ADD;
       *++e = ((ty = t - PTR) == CHAR) ? LC : LI;
     }
-    else { printf("%d: compiler error tk=%d\n", line, tk); exit(-1); }
+    else { sysfatal("%lld: compiler error tk=%lld\n", line, tk); }
   }
 }
 
@@ -284,9 +284,9 @@ void stmt()
 
   if (tk == If) {
     next();
-    if (tk == '(') next(); else { printf("%d: open paren expected\n", line); exit(-1); }
+    if (tk == '(') next(); else { sysfatal("%lld: open paren expected\n", line); }
     expr(Assign);
-    if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
+    if (tk == ')') next(); else { sysfatal("%lld: close paren expected\n", line); }
     *++e = BZ; b = ++e;
     stmt();
     if (tk == Else) {
@@ -299,9 +299,9 @@ void stmt()
   else if (tk == While) {
     next();
     a = e + 1;
-    if (tk == '(') next(); else { printf("%d: open paren expected\n", line); exit(-1); }
+    if (tk == '(') next(); else { sysfatal("%lld: open paren expected\n", line); }
     expr(Assign);
-    if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
+    if (tk == ')') next(); else { sysfatal("%lld: close paren expected\n", line); }
     *++e = BZ; b = ++e;
     stmt();
     *++e = JMP; *++e = (int)a;
@@ -311,7 +311,7 @@ void stmt()
     next();
     if (tk != ';') expr(Assign);
     *++e = LEV;
-    if (tk == ';') next(); else { printf("%d: semicolon expected\n", line); exit(-1); }
+    if (tk == ';') next(); else { sysfatal("%lld: semicolon expected\n", line); }
   }
   else if (tk == '{') {
     next();
@@ -323,7 +323,7 @@ void stmt()
   }
   else {
     expr(Assign);
-    if (tk == ';') next(); else { printf("%d: semicolon expected\n", line); exit(-1); }
+    if (tk == ';') next(); else { sysfatal("%lld: semicolon expected\n", line); }
   }
 }
 
