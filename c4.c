@@ -6,11 +6,8 @@
 
 // Written by Robert Swierczek
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <memory.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include <u.h>
+#include <libc.h>
 #define int long long
 
 char *p, *lp, // current position in source code
