@@ -1,6 +1,6 @@
 // c4.c - C in four functions
 
-// char, int, and pointer types
+// char, vlong, and povlonger types
 // if, while, return, and expression statements
 // just enough features to allow self-compilation and a bit more
 
@@ -8,12 +8,11 @@
 
 #include <u.h>
 #include <libc.h>
-#define int long long
 
 char *p, *lp, // current position in source code
-     *data;   // data/bss pointer
+     *data;   // data/bss povlonger
 
-int *e, *le,  // current position in emitted code
+vlong *e, *le,  // current position in emitted code
     *id,      // currently parsed identifier
     *sym,     // symbol table (simple list of identifiers)
     tk,       // current token
@@ -50,7 +49,7 @@ void next(void)
     ++p;
     if (tk == '\n') {
       if (src) {
-		print("%lld: %.*s", line, p - lp, lp);
+		print("%lld: %.*s", line, (int)(p - lp), lp);
         lp = p;
         while (le < e) {
           print("%8.4s", &"LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
@@ -74,7 +73,7 @@ void next(void)
         if (tk == id[Hash] && !memcmp((char *)id[Name], pp, p - pp)) { tk = id[Tk]; return; }
         id = id + Idsz;
       }
-      id[Name] = (int)pp;
+      id[Name] = (vlong)pp;
       id[Hash] = tk;
       tk = id[Tk] = Id;
       return;
@@ -108,7 +107,7 @@ void next(void)
         if (tk == '"') *data++ = ival;
       }
       ++p;
-      if (tk == '"') ival = (int)pp; else tk = Num;
+      if (tk == '"') ival = (vlong)pp; else tk = Num;
       return;
     }
     else if (tk == '=') { if (*p == '=') { ++p; tk = Eq; } else tk = Assign; return; }
@@ -128,23 +127,23 @@ void next(void)
   }
 }
 
-void expr(int lev)
+void expr(vlong lev)
 {
-  int t, *d;
+  vlong t, *d;
 
   if (!tk) { sysfatal("%lld: unexpected eof in expression\n", line); }
   else if (tk == Num) { *++e = IMM; *++e = ival; next(); ty = INT; }
   else if (tk == '"') {
     *++e = IMM; *++e = ival; next();
     while (tk == '"') next();
-    data = (char *)((int)data + sizeof(int) & -sizeof(int)); ty = PTR;
+    data = (char *)((vlong)data + sizeof(vlong) & -sizeof(vlong)); ty = PTR;
   }
   else if (tk == Sizeof) {
     next(); if (tk == '(') next(); else { sysfatal("%lld: open paren expected in sizeof\n", line); }
     ty = INT; if (tk == Int) next(); else if (tk == Char) { next(); ty = CHAR; }
     while (tk == Mul) { next(); ty = ty + PTR; }
     if (tk == ')') next(); else { sysfatal("%lld: close paren expected in sizeof\n", line); }
-    *++e = IMM; *++e = (ty == CHAR) ? sizeof(char) : sizeof(int);
+    *++e = IMM; *++e = (ty == CHAR) ? sizeof(char) : sizeof(vlong);
     ty = INT;
   }
   else if (tk == Id) {
@@ -206,7 +205,7 @@ void expr(int lev)
     else if (*e == LI) { *e = PSH; *++e = LI; }
     else { sysfatal("%lld: bad lvalue in pre-increment\n", line); }
     *++e = PSH;
-    *++e = IMM; *++e = (ty > PTR) ? sizeof(int) : sizeof(char);
+    *++e = IMM; *++e = (ty > PTR) ? sizeof(vlong) : sizeof(char);
     *++e = (t == Inc) ? ADD : SUB;
     *++e = (ty == CHAR) ? SC : SI;
   }
@@ -224,12 +223,12 @@ void expr(int lev)
       *++e = BZ; d = ++e;
       expr(Assign);
       if (tk == ':') next(); else { sysfatal("%lld: conditional missing colon\n", line); }
-      *d = (int)(e + 3); *++e = JMP; d = ++e;
+      *d = (vlong)(e + 3); *++e = JMP; d = ++e;
       expr(Cond);
-      *d = (int)(e + 1);
+      *d = (vlong)(e + 1);
     }
-    else if (tk == Lor) { next(); *++e = BNZ; d = ++e; expr(Lan); *d = (int)(e + 1); ty = INT; }
-    else if (tk == Lan) { next(); *++e = BZ;  d = ++e; expr(Or);  *d = (int)(e + 1); ty = INT; }
+    else if (tk == Lor) { next(); *++e = BNZ; d = ++e; expr(Lan); *d = (vlong)(e + 1); ty = INT; }
+    else if (tk == Lan) { next(); *++e = BZ;  d = ++e; expr(Or);  *d = (vlong)(e + 1); ty = INT; }
     else if (tk == Or)  { next(); *++e = PSH; expr(Xor); *++e = OR;  ty = INT; }
     else if (tk == Xor) { next(); *++e = PSH; expr(And); *++e = XOR; ty = INT; }
     else if (tk == And) { next(); *++e = PSH; expr(Eq);  *++e = AND; ty = INT; }
@@ -243,13 +242,13 @@ void expr(int lev)
     else if (tk == Shr) { next(); *++e = PSH; expr(Add); *++e = SHR; ty = INT; }
     else if (tk == Add) {
       next(); *++e = PSH; expr(Mul);
-      if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(int); *++e = MUL;  }
+      if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(vlong); *++e = MUL;  }
       *++e = ADD;
     }
     else if (tk == Sub) {
       next(); *++e = PSH; expr(Mul);
-      if (t > PTR && t == ty) { *++e = SUB; *++e = PSH; *++e = IMM; *++e = sizeof(int); *++e = DIV; ty = INT; }
-      else if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(int); *++e = MUL; *++e = SUB; }
+      if (t > PTR && t == ty) { *++e = SUB; *++e = PSH; *++e = IMM; *++e = sizeof(vlong); *++e = DIV; ty = INT; }
+      else if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(vlong); *++e = MUL; *++e = SUB; }
       else *++e = SUB;
     }
     else if (tk == Mul) { next(); *++e = PSH; expr(Inc); *++e = MUL; ty = INT; }
@@ -259,18 +258,18 @@ void expr(int lev)
       if (*e == LC) { *e = PSH; *++e = LC; }
       else if (*e == LI) { *e = PSH; *++e = LI; }
       else { sysfatal("%lld: bad lvalue in post-increment\n", line); }
-      *++e = PSH; *++e = IMM; *++e = (ty > PTR) ? sizeof(int) : sizeof(char);
+      *++e = PSH; *++e = IMM; *++e = (ty > PTR) ? sizeof(vlong) : sizeof(char);
       *++e = (tk == Inc) ? ADD : SUB;
       *++e = (ty == CHAR) ? SC : SI;
-      *++e = PSH; *++e = IMM; *++e = (ty > PTR) ? sizeof(int) : sizeof(char);
+      *++e = PSH; *++e = IMM; *++e = (ty > PTR) ? sizeof(vlong) : sizeof(char);
       *++e = (tk == Inc) ? SUB : ADD;
       next();
     }
     else if (tk == Brak) {
       next(); *++e = PSH; expr(Assign);
       if (tk == ']') next(); else { sysfatal("%lld: close bracket expected\n", line); }
-      if (t > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(int); *++e = MUL;  }
-      else if (t < PTR) { sysfatal("%lld: pointer type expected\n", line); }
+      if (t > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(vlong); *++e = MUL;  }
+      else if (t < PTR) { sysfatal("%lld: povlonger type expected\n", line); }
       *++e = ADD;
       *++e = ((ty = t - PTR) == CHAR) ? LC : LI;
     }
@@ -280,7 +279,7 @@ void expr(int lev)
 
 void stmt(void)
 {
-  int *a, *b;
+  vlong *a, *b;
 
   if (tk == If) {
     next();
@@ -290,11 +289,11 @@ void stmt(void)
     *++e = BZ; b = ++e;
     stmt();
     if (tk == Else) {
-      *b = (int)(e + 3); *++e = JMP; b = ++e;
+      *b = (vlong)(e + 3); *++e = JMP; b = ++e;
       next();
       stmt();
     }
-    *b = (int)(e + 1);
+    *b = (vlong)(e + 1);
   }
   else if (tk == While) {
     next();
@@ -304,8 +303,8 @@ void stmt(void)
     if (tk == ')') next(); else { sysfatal("%lld: close paren expected\n", line); }
     *++e = BZ; b = ++e;
     stmt();
-    *++e = JMP; *++e = (int)a;
-    *b = (int)(e + 1);
+    *++e = JMP; *++e = (vlong)a;
+    *b = (vlong)(e + 1);
   }
   else if (tk == Return) {
     next();
@@ -327,11 +326,11 @@ void stmt(void)
   }
 }
 
-int main(int argc, char **argv)
+vlong main(vlong argc, char **argv)
 {
-  int fd, bt, ty, poolsz, *idmain;
-  int *pc, *sp, *bp, a, cycle; // vm registers
-  int i, *t; // temps
+  vlong fd, bt, ty, poolsz, *idmain;
+  vlong *pc, *sp, *bp, a, cycle; // vm registers
+  vlong i, *t; // temps
   
   a = 0;
 
@@ -352,7 +351,7 @@ int main(int argc, char **argv)
   memset(e,    0, poolsz);
   memset(data, 0, poolsz);
 
-  p = "char else enum if int return sizeof while "
+  p = "char else enum if vlong return sizeof while "
       "open read close print malloc free memset memcmp exit void main";
   i = Char; while (i <= While) { next(); id[Tk] = i++; } // add keywords to symbol table
   i = OPEN; while (i <= EXIT) { next(); id[Class] = Sys; id[Type] = INT; id[Val] = i++; } // add library to symbol table
@@ -401,7 +400,7 @@ int main(int argc, char **argv)
       id[Type] = ty;
       if (tk == '(') { // function
         id[Class] = Fun;
-        id[Val] = (int)(e + 1);
+        id[Val] = (vlong)(e + 1);
         next(); i = 0;
         while (tk != ')') {
           ty = INT;
@@ -451,24 +450,24 @@ int main(int argc, char **argv)
       }
       else {
         id[Class] = Glo;
-        id[Val] = (int)data;
-        data = data + sizeof(int);
+        id[Val] = (vlong)data;
+        data = data + sizeof(vlong);
       }
       if (tk == ',') next();
     }
     next();
   }
 
-  if (!(pc = (int *)idmain[Val])) { print("main() not defined\n"); return -1; }
+  if (!(pc = (vlong *)idmain[Val])) { print("main() not defined\n"); return -1; }
   if (src) return 0;
 
   // setup stack
-  bp = sp = (int *)((int)sp + poolsz);
+  bp = sp = (vlong *)((vlong)sp + poolsz);
   *--sp = EXIT; // call exit if main returns
   *--sp = PSH; t = sp;
   *--sp = argc;
-  *--sp = (int)argv;
-  *--sp = (int)t;
+  *--sp = (vlong)argv;
+  *--sp = (vlong)t;
 
   // run...
   cycle = 0;
@@ -481,18 +480,18 @@ int main(int argc, char **argv)
          "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
       if (i <= ADJ) print(" %lld\n", *pc); else print("\n");
     }
-    if      (i == LEA) a = (int)(bp + *pc++);                             // load local address
+    if      (i == LEA) a = (vlong)(bp + *pc++);                             // load local address
     else if (i == IMM) a = *pc++;                                         // load global address or immediate
-    else if (i == JMP) pc = (int *)*pc;                                   // jump
-    else if (i == JSR) { *--sp = (int)(pc + 1); pc = (int *)*pc; }        // jump to subroutine
-    else if (i == BZ)  pc = a ? pc + 1 : (int *)*pc;                      // branch if zero
-    else if (i == BNZ) pc = a ? (int *)*pc : pc + 1;                      // branch if not zero
-    else if (i == ENT) { *--sp = (int)bp; bp = sp; sp = sp - *pc++; }     // enter subroutine
+    else if (i == JMP) pc = (vlong *)*pc;                                   // jump
+    else if (i == JSR) { *--sp = (vlong)(pc + 1); pc = (vlong *)*pc; }        // jump to subroutine
+    else if (i == BZ)  pc = a ? pc + 1 : (vlong *)*pc;                      // branch if zero
+    else if (i == BNZ) pc = a ? (vlong *)*pc : pc + 1;                      // branch if not zero
+    else if (i == ENT) { *--sp = (vlong)bp; bp = sp; sp = sp - *pc++; }     // enter subroutine
     else if (i == ADJ) sp = sp + *pc++;                                   // stack adjust
-    else if (i == LEV) { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; } // leave subroutine
-    else if (i == LI)  a = *(int *)a;                                     // load int
+    else if (i == LEV) { sp = bp; bp = (vlong *)*sp++; pc = (vlong *)*sp++; } // leave subroutine
+    else if (i == LI)  a = *(vlong *)a;                                     // load vlong
     else if (i == LC)  a = *(char *)a;                                    // load char
-    else if (i == SI)  *(int *)*sp++ = a;                                 // store int
+    else if (i == SI)  *(vlong *)*sp++ = a;                                 // store vlong
     else if (i == SC)  a = *(char *)*sp++ = a;                            // store char
     else if (i == PSH) *--sp = a;                                         // push
 
@@ -517,9 +516,9 @@ int main(int argc, char **argv)
     else if (i == READ) a = read(sp[2], (char *)sp[1], *sp);
     else if (i == CLOS) a = close(*sp);
     else if (i == PRTF) { t = sp + pc[1]; a = print((char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
-    else if (i == MALC) a = (int)malloc(*sp);
+    else if (i == MALC) a = (vlong)malloc(*sp);
     else if (i == FREE) free((void *)*sp);
-    else if (i == MSET) a = (int)memset((char *)sp[2], sp[1], *sp);
+    else if (i == MSET) a = (vlong)memset((char *)sp[2], sp[1], *sp);
     else if (i == MCMP) a = memcmp((char *)sp[2], (char *)sp[1], *sp);
     else if (i == EXIT) { print("exit(%lld) cycle = %lld\n", *sp, cycle); return *sp; }
     else { print("unknown instruction = %lld! cycle = %lld\n", i, cycle); return -1; }
