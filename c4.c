@@ -8,6 +8,9 @@
 
 #include <u.h>
 #include <libc.h>
+#include <bio.h>
+
+Biobuf *out;
 
 char *p, *lp, // current position in source code
      *data;   // data/bss povlonger
@@ -41,7 +44,8 @@ enum { CHAR, INT, PTR };
 // identifier offsets (since we can't create an ident struct)
 enum { Tk, Hash, Name, Class, Type, Val, HClass, HType, HVal, Idsz };
 
-void next(void)
+void
+next(void)
 {
   char *pp;
 
@@ -49,13 +53,13 @@ void next(void)
     ++p;
     if (tk == '\n') {
       if (src) {
-		print("%lld: %.*s", line, (int)(p - lp), lp);
+		Bprint(out, "%lld: %.*s", line, (int)(p - lp), lp);
         lp = p;
         while (le < e) {
-          print("%8.4s", &"LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
+          Bprint(out, "%8.4s", &"LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
                            "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
                            "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[*++le * 5]);
-          if (*le <= ADJ) print(" %lld\n", *++le); else print("\n");
+          if (*le <= ADJ) Bprint(out, " %lld\n", *++le); else Bprint(out, "\n");
         }
       }
       ++line;
@@ -127,7 +131,8 @@ void next(void)
   }
 }
 
-void expr(vlong lev)
+void
+expr(vlong lev)
 {
   vlong t, *d;
 
@@ -277,7 +282,8 @@ void expr(vlong lev)
   }
 }
 
-void stmt(void)
+void
+stmt(void)
 {
   vlong *a, *b;
 
@@ -326,26 +332,28 @@ void stmt(void)
   }
 }
 
-vlong main(vlong argc, char **argv)
+void
+main(int argc, char **argv)
 {
   vlong fd, bt, ty, poolsz, *idmain;
   vlong *pc, *sp, *bp, a, cycle; // vm registers
   vlong i, *t; // temps
   
   a = 0;
+out = Bfdopen(1, OWRITE);
 
   --argc; ++argv;
   if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
   if (argc > 0 && **argv == '-' && (*argv)[1] == 'd') { debug = 1; --argc; ++argv; }
-  if (argc < 1) { print("usage: c4 [-s] [-d] file ...\n"); return -1; }
+  if (argc < 1) { sysfatal("usage: c4 [-s] [-d] file ...\n"); }
 
-  if ((fd = open(*argv, 0)) < 0) { print("could not open(%s)\n", *argv); return -1; }
+  if ((fd = open(*argv, 0)) < 0) { sysfatal("could not open(%s)\n", *argv); }
 
   poolsz = 256*1024; // arbitrary size
-  if (!(sym = malloc(poolsz))) { print("could not malloc(%lld) symbol area\n", poolsz); return -1; }
-  if (!(le = e = malloc(poolsz))) { print("could not malloc(%lld) text area\n", poolsz); return -1; }
-  if (!(data = malloc(poolsz))) { print("could not malloc(%lld) data area\n", poolsz); return -1; }
-  if (!(sp = malloc(poolsz))) { print("could not malloc(%lld) stack area\n", poolsz); return -1; }
+  if (!(sym = malloc(poolsz))) { sysfatal("could not malloc(%lld) symbol area\n", poolsz); }
+  if (!(le = e = malloc(poolsz))) { sysfatal("could not malloc(%lld) text area\n", poolsz); }
+  if (!(data = malloc(poolsz))) { sysfatal("could not malloc(%lld) data area\n", poolsz); }
+  if (!(sp = malloc(poolsz))) { sysfatal("could not malloc(%lld) stack area\n", poolsz); }
 
   memset(sym,  0, poolsz);
   memset(e,    0, poolsz);
@@ -358,8 +366,8 @@ vlong main(vlong argc, char **argv)
   next(); id[Tk] = Char; // handle void type
   next(); idmain = id; // keep track of main
 
-  if (!(lp = p = malloc(poolsz))) { print("could not malloc(%lld) source area\n", poolsz); return -1; }
-  if ((i = read(fd, p, poolsz-1)) <= 0) { print("read() returned %lld\n", i); return -1; }
+  if (!(lp = p = malloc(poolsz))) { sysfatal("could not malloc(%lld) source area\n", poolsz); }
+  if ((i = read(fd, p, poolsz-1)) <= 0) { sysfatal("read() returned %lld\n", i); }
   p[i] = 0;
   close(fd);
 
@@ -377,11 +385,11 @@ vlong main(vlong argc, char **argv)
         next();
         i = 0;
         while (tk != '}') {
-          if (tk != Id) { print("%lld: bad enum identifier %lld\n", line, tk); return -1; }
+          if (tk != Id) { sysfatal("%lld: bad enum identifier %lld\n", line, tk); }
           next();
           if (tk == Assign) {
             next();
-            if (tk != Num) { print("%lld: bad enum initializer\n", line); return -1; }
+            if (tk != Num) { sysfatal("%lld: bad enum initializer\n", line); }
             i = ival;
             next();
           }
@@ -394,8 +402,8 @@ vlong main(vlong argc, char **argv)
     while (tk != ';' && tk != '}') {
       ty = bt;
       while (tk == Mul) { next(); ty = ty + PTR; }
-      if (tk != Id) { print("%lld: bad global declaration\n", line); return -1; }
-      if (id[Class]) { print("%lld: duplicate global definition\n", line); return -1; }
+      if (tk != Id) { sysfatal("%lld: bad global declaration\n", line);  }
+      if (id[Class]) { sysfatal("%lld: duplicate global definition\n", line); }
       next();
       id[Type] = ty;
       if (tk == '(') { // function
@@ -407,8 +415,8 @@ vlong main(vlong argc, char **argv)
           if (tk == Int) next();
           else if (tk == Char) { next(); ty = CHAR; }
           while (tk == Mul) { next(); ty = ty + PTR; }
-          if (tk != Id) { print("%lld: bad parameter declaration\n", line); return -1; }
-          if (id[Class] == Loc) { print("%lld: duplicate parameter definition\n", line); return -1; }
+          if (tk != Id) { sysfatal("%lld: bad parameter declaration\n", line); }
+          if (id[Class] == Loc) { sysfatal("%lld: duplicate parameter definition\n", line); }
           id[HClass] = id[Class]; id[Class] = Loc;
           id[HType]  = id[Type];  id[Type] = ty;
           id[HVal]   = id[Val];   id[Val] = i++;
@@ -416,7 +424,7 @@ vlong main(vlong argc, char **argv)
           if (tk == ',') next();
         }
         next();
-        if (tk != '{') { print("%lld: bad function definition\n", line); return -1; }
+        if (tk != '{') { sysfatal("%lld: bad function definition\n", line); }
         loc = ++i;
         next();
         while (tk == Int || tk == Char) {
@@ -425,8 +433,8 @@ vlong main(vlong argc, char **argv)
           while (tk != ';') {
             ty = bt;
             while (tk == Mul) { next(); ty = ty + PTR; }
-            if (tk != Id) { print("%lld: bad local declaration\n", line); return -1; }
-            if (id[Class] == Loc) { print("%lld: duplicate local definition\n", line); return -1; }
+            if (tk != Id) { sysfatal("%lld: bad local declaration\n", line); }
+            if (id[Class] == Loc) { sysfatal("%lld: duplicate local definition\n", line); }
             id[HClass] = id[Class]; id[Class] = Loc;
             id[HType]  = id[Type];  id[Type] = ty;
             id[HVal]   = id[Val];   id[Val] = ++i;
@@ -458,8 +466,8 @@ vlong main(vlong argc, char **argv)
     next();
   }
 
-  if (!(pc = (vlong *)idmain[Val])) { print("main() not defined\n"); return -1; }
-  if (src) return 0;
+  if (!(pc = (vlong *)idmain[Val])) { sysfatal("main() not defined\n"); }
+  if (src) exits(nil);
 
   // setup stack
   bp = sp = (vlong *)((vlong)sp + poolsz);
@@ -474,11 +482,11 @@ vlong main(vlong argc, char **argv)
   while (1) {
     i = *pc++; ++cycle;
     if (debug) {
-      print("%lld> %.4s", cycle,
+      Bprint(out, "%lld> %.4s", cycle,
         &"LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
          "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
          "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
-      if (i <= ADJ) print(" %lld\n", *pc); else print("\n");
+      if (i <= ADJ) Bprint(out, " %lld\n", *pc); else Bprint(out, "\n");
     }
     if      (i == LEA) a = (vlong)(bp + *pc++);                             // load local address
     else if (i == IMM) a = *pc++;                                         // load global address or immediate
@@ -515,12 +523,16 @@ vlong main(vlong argc, char **argv)
     else if (i == OPEN) a = open((char *)sp[1], *sp);
     else if (i == READ) a = read(sp[2], (char *)sp[1], *sp);
     else if (i == CLOS) a = close(*sp);
-    else if (i == PRTF) { t = sp + pc[1]; a = print((char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
+    else if (i == PRTF) { t = sp + pc[1]; a = Bprint(out, (char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
     else if (i == MALC) a = (vlong)malloc(*sp);
     else if (i == FREE) free((void *)*sp);
     else if (i == MSET) a = (vlong)memset((char *)sp[2], sp[1], *sp);
     else if (i == MCMP) a = memcmp((char *)sp[2], (char *)sp[1], *sp);
-    else if (i == EXIT) { print("exit(%lld) cycle = %lld\n", *sp, cycle); return *sp; }
-    else { print("unknown instruction = %lld! cycle = %lld\n", i, cycle); return -1; }
+    else if (i == EXIT) {
+    	Bprint(out, "exit(%lld) cycle = %lld\n", *sp, cycle);
+    	Bflush(out);
+    	exits(nil); /* sprint status? */ 
+    }
+    else { sysfatal("unknown instruction = %lld! cycle = %lld\n", i, cycle); }
   }
 }
